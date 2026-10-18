@@ -11,10 +11,12 @@ on:
         paths:
             - "constraint/**"
             - "tests/**"
+            - "bench/**"
             - "cythonize_build.py"
             - "noxfile.py"
             - "pyproject.toml"
             - ".github/workflows/build-test-python-package.yml"
+    workflow_dispatch:
 
 permissions:
     # deployments permission to deploy GitHub pages website
