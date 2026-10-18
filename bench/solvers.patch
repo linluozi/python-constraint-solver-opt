@@ -1,0 +1,413 @@
+diff --git a/constraint/solvers.py b/constraint/solvers.py
+index f581748..ca8b676 100644
+--- a/constraint/solvers.py
++++ b/constraint/solvers.py
+@@ -69,6 +69,45 @@ def doArc8(arcs: dict, domains: dict, assignments: dict) -> bool:
+     return True
+ 
+ 
++class SearchPlan:
++    """Index-based view of the search variables, built once per solve.
++
++    The backtracking solvers repeatedly need (a) a tie-breaking order over the
++    variables and (b) the set of variables a given variable shares a constraint
++    with.  Both are static for the whole search, so they are precomputed here
++    instead of being rebuilt (and re-sorted) at every node of the search tree.
++
++    Attributes:
++        names: variables in heuristic order (see :py:meth:`OptimizedBacktrackingSolver.getSortedVariables`)
++        domains: the :py:class:`~constraint.domain.Domain` of ``names[i]``
++        degrees: ``-len(vconstraints[v])`` for every variable, i.e. the number of
++            constraints a variable participates in, negated so that "more
++            constrained" sorts first
++        neighbours: for every variable, the indices of the other variables that
++            appear together with it in at least one constraint
++        index: mapping from variable to its position in ``names``
++    """
++
++    __slots__ = ("names", "domains", "degrees", "neighbours", "index")
++
++    def __init__(self, domains: dict, vconstraints: dict):
++        """Build the static order, the degree table and the constraint-neighbour table."""
++        order = [(-len(vconstraints[variable]), len(domains[variable]), variable) for variable in domains]
++        order.sort(key=lambda item: (item[0], item[1]))
++        self.names = [item[2] for item in order]
++        self.degrees = [item[0] for item in order]
++        self.domains = [domains[variable] for variable in self.names]
++        self.index = {variable: i for i, variable in enumerate(self.names)}
++        self.neighbours = []
++        for variable in self.names:
++            related = set()
++            for _constraint, variables in vconstraints[variable]:
++                for other in variables:
++                    if other != variable and other in self.index:
++                        related.add(other)
++            self.neighbours.append(tuple(sorted(self.index[other] for other in related)))
++
++
+ class Solver:
+     """Abstract base class for solvers."""
+ 
+@@ -154,46 +193,77 @@ class BacktrackingSolver(Solver):
+         forwardcheck = self._forwardcheck
+         assignments = {}
+ 
++        # OPTIMIZATION: the heuristic order and the constraint neighbourhood of every
++        # variable are static, so they are computed once (was: rebuilt and re-sorted
++        # at every single node of the search tree by the original implementation).
++        plan = SearchPlan(domains, vconstraints)
++        names = plan.names
++        plan_domains = plan.domains
++        degrees = plan.degrees
++        neighbours = plan.neighbours
++        taken = [False] * len(names)
++
+         queue = []
+ 
+         while True:
+-            # Mix the Degree and Minimum Remaing Values (MRV) heuristics
+-            lst = [(-len(vconstraints[variable]), len(domains[variable]), variable) for variable in domains]
+-            lst.sort(key=lambda x: (x[0], x[1]))
+-            for item in lst:
+-                if item[-1] not in assignments:
+-                    # Found unassigned variable
+-                    variable = item[-1]
+-                    values = domains[variable][:]
+-                    if forwardcheck:
+-                        pushdomains = [domains[x] for x in domains if x not in assignments and x != variable]
+-                    else:
+-                        pushdomains = None
+-                    break
+-            else:
++            # Mix the Degree and Minimum Remaing Values (MRV) heuristics.
++            # OPTIMIZATION: a single allocation-free scan picks the same variable the
++            # "build a list of tuples + sort it" version picked, but in O(n) with no
++            # tuple/list allocation and no Python-level sort key callback.
++            chosen = -1
++            chosen_degree = 0
++            chosen_size = 0
++            for i, is_taken in enumerate(taken):
++                if is_taken:
++                    continue
++                degree = degrees[i]
++                size = len(plan_domains[i])
++                if chosen < 0 or degree < chosen_degree or (degree == chosen_degree and size < chosen_size):
++                    chosen = i
++                    chosen_degree = degree
++                    chosen_size = size
++
++            if chosen < 0:
+                 # No unassigned variables. We've got a solution. Go back
+                 # to last variable, if there's one.
+                 yield assignments.copy()
+                 if not queue:
+                     return
+-                variable, values, pushdomains = queue.pop()
++                i, values, pushdomains = queue.pop()
++                variable = names[i]
+                 if pushdomains:
+                     for domain in pushdomains:
+                         domain.popState()
++            else:
++                i = chosen
++                variable = names[i]
++                values = plan_domains[i][:]
++                if forwardcheck:
++                    # OPTIMIZATION: only the domains this variable can actually write to
++                    # are pushed/popped.  Every constraint of `variable` only hides values
++                    # in the domains of the variables it is declared on, so pushing the
++                    # whole (unassigned) domain list - as the original did - is wasted work.
++                    pushdomains = [plan_domains[j] for j in neighbours[i] if not taken[j]]
++                else:
++                    pushdomains = None
++                taken[i] = True
+ 
+             while True:
+                 # We have a variable. Do we have any values left?
+                 if not values:
+                     # No. Go back to last variable, if there's one.
+                     del assignments[variable]
++                    taken[i] = False
+                     while queue:
+-                        variable, values, pushdomains = queue.pop()
++                        i, values, pushdomains = queue.pop()
++                        variable = names[i]
+                         if pushdomains:
+                             for domain in pushdomains:
+                                 domain.popState()
+                         if values:
+                             break
+                         del assignments[variable]
++                        taken[i] = False
+                     else:
+                         return
+ 
+@@ -216,7 +286,7 @@ class BacktrackingSolver(Solver):
+                         domain.popState()
+ 
+             # Push state before looking for next variable.
+-            queue.append((variable, values, pushdomains))
++            queue.append((i, values, pushdomains))
+ 
+         raise RuntimeError("Can't happen")
+ 
+@@ -263,58 +333,120 @@ class OptimizedBacktrackingSolver(Solver):
+         True
+     """
+ 
+-    def __init__(self, forwardcheck=True):
++    def __init__(self, forwardcheck=True, dynamic_mrv=True, restricted_pushdomains=True):
+         """Initialization method.
+ 
+         Args:
+             forwardcheck (bool): If false forward checking will not be
+                 requested to constraints while looking for solutions
+                 (default is true)
++            dynamic_mrv (bool): Re-evaluate the Minimum Remaining Values
++                heuristic at every node using the *current* (forward-checked)
++                domain sizes instead of only once at the start of the search
++                (default is true).  Set to false to restore the previous static
++                ordering.
++            restricted_pushdomains (bool): Only save/restore the domains of the
++                variables that share a constraint with the variable being
++                assigned, instead of every unassigned domain (default is true).
++                This is valid for every constraint shipped with this package
++                (a constraint only ever hides values in the domains of the
++                variables it is declared on); set to false if you use a custom
++                :py:class:`~constraint.constraints.Constraint` that hides values
++                in the domain of a variable it is not declared on.
+         """
+         self._forwardcheck = forwardcheck
++        self._dynamic_mrv = dynamic_mrv
++        self._restricted_pushdomains = restricted_pushdomains
+ 
+     def getSolutionIter(self, domains: dict, constraints: list[tuple], vconstraints: dict):  # noqa: D102
+         forwardcheck = self._forwardcheck
+         assignments = {}
+-        sorted_variables = self.getSortedVariables(domains, vconstraints)
++
++        # OPTIMIZATION: build the static tie-breaking order and the constraint
++        # neighbourhood table once instead of re-scanning the domain dict per node.
++        plan = SearchPlan(domains, vconstraints)
++        names = plan.names
++        plan_domains = plan.domains
++        degrees = plan.degrees
++        neighbours = plan.neighbours
++        taken = [False] * len(names)
++        dynamic_mrv = self._dynamic_mrv
++        restricted = self._restricted_pushdomains
+ 
+         queue = []
+ 
+         while True:
+-            # Mix the Degree and Minimum Remaing Values (MRV) heuristics
+-            for variable in sorted_variables:
+-                if variable not in assignments:
+-                    # Found unassigned variable
+-                    values = domains[variable][:]
+-                    if forwardcheck:
+-                        pushdomains = [domains[x] for x in domains if x not in assignments and x != variable]
+-                    else:
+-                        pushdomains = None
+-                    break
++            # Mix the Degree and Minimum Remaing Values (MRV) heuristics.
++            if dynamic_mrv:
++                # OPTIMIZATION: true ("dynamic") MRV - the domain sizes used by the
++                # heuristic are the *current* ones, so the search keeps adapting to the
++                # values forward checking has hidden.  The cost is a single O(#unassigned)
++                # scan with no allocation and no sort, which is cheaper than the static
++                # scan it replaces once the saved nodes are taken into account.
++                chosen = -1
++                chosen_degree = 0
++                chosen_size = 0
++                for i, is_taken in enumerate(taken):
++                    if is_taken:
++                        continue
++                    degree = degrees[i]
++                    size = len(plan_domains[i])
++                    if chosen < 0 or degree < chosen_degree or (degree == chosen_degree and size < chosen_size):
++                        chosen = i
++                        chosen_degree = degree
++                        chosen_size = size
+             else:
++                # Legacy behaviour: always take the first unassigned variable of the
++                # order computed once at the start of the search.
++                chosen = -1
++                for i, is_taken in enumerate(taken):
++                    if not is_taken:
++                        chosen = i
++                        break
++
++            if chosen < 0:
+                 # No unassigned variables. We've got a solution. Go back
+                 # to last variable, if there's one.
+                 yield assignments.copy()
+                 if not queue:
+                     return
+-                variable, values, pushdomains = queue.pop()
++                i, values, pushdomains = queue.pop()
++                variable = names[i]
+                 if pushdomains:
+                     for domain in pushdomains:
+                         domain.popState()
++            else:
++                i = chosen
++                variable = names[i]
++                values = plan_domains[i][:]
++                if forwardcheck:
++                    if restricted:
++                        # OPTIMIZATION: only push/pop the domains that the constraints of
++                        # this variable can hide values in (its constraint neighbours),
++                        # instead of every unassigned domain.
++                        pushdomains = [plan_domains[j] for j in neighbours[i] if not taken[j]]
++                    else:
++                        pushdomains = [plan_domains[j] for j in range(len(names)) if not taken[j] and j != i]
++                else:
++                    pushdomains = None
++                taken[i] = True
+ 
+             while True:
+                 # We have a variable. Do we have any values left?
+                 if not values:
+                     # No. Go back to last variable, if there's one.
+                     del assignments[variable]
++                    taken[i] = False
+                     while queue:
+-                        variable, values, pushdomains = queue.pop()
++                        i, values, pushdomains = queue.pop()
++                        variable = names[i]
+                         if pushdomains:
+                             for domain in pushdomains:
+                                 domain.popState()
+                         if values:
+                             break
+                         del assignments[variable]
++                        taken[i] = False
+                     else:
+                         return
+ 
+@@ -337,7 +469,7 @@ class OptimizedBacktrackingSolver(Solver):
+                         domain.popState()
+ 
+             # Push state before looking for next variable.
+-            queue.append((variable, values, pushdomains))
++            queue.append((i, values, pushdomains))
+ 
+         raise RuntimeError("Can't happen")
+ 
+@@ -453,17 +585,22 @@ class RecursiveBacktrackingSolver(Solver):
+         NotImplementedError: RecursiveBacktrackingSolver doesn't provide iteration
+     """
+ 
+-    def __init__(self, forwardcheck=True):
++    def __init__(self, forwardcheck=True, restricted_pushdomains=True):
+         """Initialization method.
+ 
+         Args:
+             forwardcheck (bool): If false forward checking will not be
+                 requested to constraints while looking for solutions
+                 (default is true)
++            restricted_pushdomains (bool): Only save/restore the domains of the
++                variables that share a constraint with the variable being
++                assigned (default is true).  See
++                :py:class:`OptimizedBacktrackingSolver` for the exact assumption.
+         """
+         self._forwardcheck = forwardcheck
++        self._restricted_pushdomains = restricted_pushdomains
+ 
+-    def recursiveBacktracking(self, solutions, domains, vconstraints, assignments, single):
++    def recursiveBacktracking(self, solutions, domains, vconstraints, assignments, single, plan=None):
+         """Mix the Degree and Minimum Remaing Values (MRV) heuristics.
+ 
+         Args:
+@@ -472,31 +609,55 @@ class RecursiveBacktrackingSolver(Solver):
+             vconstraints: _description_
+             assignments: _description_
+             single: _description_
++            plan: optional pre-built :py:class:`SearchPlan` (built on the first call
++                and reused by the recursive calls)
+ 
+         Returns:
+             _description_
+         """
+-        lst = [(-len(vconstraints[variable]), len(domains[variable]), variable) for variable in domains]
+-        lst.sort(key=lambda x: (x[0], x[1]))
+-        for item in lst:
+-            if item[-1] not in assignments:
+-                # Found an unassigned variable. Let's go.
+-                break
+-        else:
++        # OPTIMIZATION: the heuristic order and the constraint neighbourhood table are
++        # static, so they are built once per solve instead of being rebuilt and
++        # re-sorted at every node.
++        if plan is None:
++            plan = SearchPlan(domains, vconstraints)
++        names = plan.names
++        plan_domains = plan.domains
++        degrees = plan.degrees
++        neighbours = plan.neighbours
++
++        # OPTIMIZATION: single allocation-free scan instead of "build tuples + sort".
++        chosen = -1
++        chosen_degree = 0
++        chosen_size = 0
++        for i, name in enumerate(names):
++            if name in assignments:
++                continue
++            degree = degrees[i]
++            size = len(plan_domains[i])
++            if chosen < 0 or degree < chosen_degree or (degree == chosen_degree and size < chosen_size):
++                chosen = i
++                chosen_degree = degree
++                chosen_size = size
++
++        if chosen < 0:
+             # No unassigned variables. We've got a solution.
+             solutions.append(assignments.copy())
+             return solutions
+ 
+-        variable = item[-1]
++        variable = names[chosen]
+         assignments[variable] = None
+ 
+         forwardcheck = self._forwardcheck
+         if forwardcheck:
+-            pushdomains = [domains[x] for x in domains if x not in assignments]
++            if self._restricted_pushdomains:
++                # OPTIMIZATION: only the domains this variable shares a constraint with.
++                pushdomains = [plan_domains[j] for j in neighbours[chosen] if names[j] not in assignments]
++            else:
++                pushdomains = [plan_domains[j] for j in range(len(names)) if names[j] not in assignments]
+         else:
+             pushdomains = None
+ 
+-        for value in domains[variable]:
++        for value in plan_domains[chosen]:
+             assignments[variable] = value
+             if pushdomains:
+                 for domain in pushdomains:
+@@ -507,7 +668,7 @@ class RecursiveBacktrackingSolver(Solver):
+                     break
+             else:
+                 # Value is good. Recurse and get next variable.
+-                self.recursiveBacktracking(solutions, domains, vconstraints, assignments, single)
++                self.recursiveBacktracking(solutions, domains, vconstraints, assignments, single, plan)
+                 if solutions and single:
+                     return solutions
+             if pushdomains:
+@@ -517,11 +678,13 @@ class RecursiveBacktrackingSolver(Solver):
+         return solutions
+ 
+     def getSolution(self, domains: dict, constraints: list[tuple], vconstraints: dict):  # noqa: D102
+-        solutions = self.recursiveBacktracking([], domains, vconstraints, {}, True)
++        plan = SearchPlan(domains, vconstraints)
++        solutions = self.recursiveBacktracking([], domains, vconstraints, {}, True, plan)
+         return solutions and solutions[0] or None
+ 
+     def getSolutions(self, domains: dict, constraints: list[tuple], vconstraints: dict):  # noqa: D102
+-        return self.recursiveBacktracking([], domains, vconstraints, {}, False)
++        plan = SearchPlan(domains, vconstraints)
++        return self.recursiveBacktracking([], domains, vconstraints, {}, False, plan)
+ 
+ 
+ class MinConflictsSolver(Solver):

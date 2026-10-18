@@ -1,0 +1,115 @@
+[build-system]
+requires = ["poetry-core>=2.4.1", "setuptools>=84.0.0", "Cython>=3.2.9"]
+build-backend = "poetry.core.masonry.api" 
+
+[project]
+name = "python-constraint2" # when set back to "python-constraint", don't forget to remove '2' in other places (e.g. README)
+description = "python-constraint is a module for efficiently solving CSPs (Constraint Solving Problems) over finite domains."
+version = "2.7.3" # adhere to PEP440 versioning: https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#id55
+authors = [
+    {name = "Floris-Jan Willemsen", email = "fjwillemsen97@gmail.com"},
+    {name = "Sébastien Celles", email = "s.celles@gmail.com"},
+    {name = "Gustavo Niemeyer", email = "gustavo@niemeyer.net"},
+]
+license = "BSD-2-Clause"
+readme = "README.rst"
+maintainers = [{name = "Floris-Jan Willemsen", email = "fjwillemsen97@gmail.com"}]
+keywords = [
+    "CSP",
+    "constraint solving problems",
+    "problem solver",
+    "SMT",
+    "satisfiability modulo theory",
+    "SAT",
+]
+classifiers = [
+    "Environment :: Console",
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Natural Language :: English",
+    "Programming Language :: C",
+    "Programming Language :: Cython",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+# ATTENTION: if anything is changed here, run `poetry update`
+requires-python = ">= 3.11"  # when changing the Python versions, also change the test versions in the Noxfile and GitHub Actions
+
+[project.urls]
+Homepage = "http://python-constraint.github.io/python-constraint/"
+Repository = "https://github.com/python-constraint/python-constraint"
+Documentation = "http://python-constraint.github.io/python-constraint/"
+Issues = "https://github.com/python-constraint/python-constraint/issues"
+Changelog = "https://github.com/python-constraint/python-constraint/blob/main/CHANGELOG.md"
+
+[tool.poetry]
+include = [{ path = "constraint/*.so", format = "wheel" }]
+packages = [
+    { include = "constraint", from = "." },
+    { include = "tests", format = "sdist" }
+]
+
+
+[tool.poetry.build]
+generate-setup-file = false
+script = "cythonize_build.py"
+
+# ATTENTION: if anything is changed here, run `poetry update` and `poetry export --with docs --without-hashes --format=requirements.txt > docs/requirements.txt`
+[tool.poetry.group.docs]
+optional = true
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.10"
+[tool.poetry.group.docs.dependencies]
+sphinx = ">=8.0.0"                       # can be updated to >=9.*.* when Python 3.12 is dropped
+sphinx-autodoc-typehints = ">=3.0.0"
+sphinx_rtd_theme = "^3.0.2"
+sphinx-pyproject = "^0.3.0"
+
+# ATTENTION: if anything is changed here, run `poetry update`
+[tool.poetry.group.dev.dependencies]
+Cython = "^3.2.9"
+[tool.poetry.group.test]
+optional = true
+[tool.poetry.group.test.dependencies]
+pytest = "^9.1.1"
+pytest-benchmark = "^5.2.3"
+pytest-cov = "^7.1.0"
+nox = "^2026.8.10"
+ruff = "^0.16.3"
+pep440 = "^0.1.2"
+
+# development dependencies are unused for now, as this is already covered by test and docs
+# # ATTENTION: if anything is changed here, run `poetry update`
+# [tool.poetry.group.dev.dependencies]
+
+[tool.black]
+line-length = 120
+[tool.ruff]
+line-length = 120
+src = ["constraint"]
+respect-gitignore = true
+exclude = ["docs", "examples", "tests"]
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle
+    "F",  # pyflakes,
+    "D",  # pydocstyle,
+    "UP", # pyupgrade
+]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+minversion = "8.0.0"
+pythonpath = [
+    "constraint",
+] # necessary to get coverage reports without installing with `-e`
+addopts = "--cov --cov-config=.coveragerc --cov-report xml --cov-report term-missing --cov-fail-under 80"
+testpaths = ["tests"]

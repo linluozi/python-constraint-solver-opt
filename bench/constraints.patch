@@ -1,0 +1,41 @@
+diff --git a/constraint/constraints.py b/constraint/constraints.py
+index f392237..969c77a 100644
+--- a/constraint/constraints.py
++++ b/constraint/constraints.py
+@@ -318,8 +318,12 @@ class ExactSumConstraint(Constraint):
+         Constraint.preProcess(self, variables, domains, constraints, vconstraints)
+         multipliers = self._multipliers if self._multipliers else [1] * len(variables)
+         exactsum = self._exactsum
+-        self._var_min = { variable: min(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
+-        self._var_max = { variable: max(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
++        # A domain can already be empty when preProcess runs again on a problem whose
++        # domains were pruned by an earlier solve; min()/max() on an empty domain raise
++        # ValueError, so an empty domain contributes 0 exactly like the recalculation
++        # further down already assumes.
++        self._var_min = { variable: min(domains[variable]) * multiplier if len(domains[variable]) > 0 else 0 for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
++        self._var_max = { variable: max(domains[variable]) * multiplier if len(domains[variable]) > 0 else 0 for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
+ 
+         # preprocess the domains to remove values that cannot contribute to the exact sum
+         for variable, multiplier in zip(variables, multipliers):
+@@ -539,7 +543,9 @@ class MinSumConstraint(Constraint):
+     def preProcess(self, variables: Sequence, domains: dict, constraints: list[tuple], vconstraints: dict): # noqa: D102
+         Constraint.preProcess(self, variables, domains, constraints, vconstraints)
+         multipliers = self._multipliers if self._multipliers else [1] * len(variables)
+-        self._var_max = { variable: max(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
++        # Guarded like the recalculation below: a domain can be empty here when the
++        # problem is solved a second time after preProcess already pruned it.
++        self._var_max = { variable: max(domains[variable]) * multiplier if len(domains[variable]) > 0 else 0 for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
+ 
+         # preprocess the domains to remove values that cannot contribute to the minimum sum
+         for variable, multiplier in zip(variables, multipliers):
+@@ -690,7 +696,9 @@ class MaxSumConstraint(Constraint):
+         Constraint.preProcess(self, variables, domains, constraints, vconstraints)
+         multipliers = self._multipliers if self._multipliers else [1] * len(variables)
+         maxsum = self._maxsum
+-        self._var_min = { variable: min(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
++        # Same guard as ExactSumConstraint.preProcess: an empty domain must not reach
++        # min(), which is what happened when a problem was solved twice.
++        self._var_min = { variable: min(domains[variable]) * multiplier if len(domains[variable]) > 0 else 0 for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
+         
+         # preprocess the domains to remove values that cannot contribute to the sum
+         for variable, multiplier in zip(variables, multipliers):

@@ -1,0 +1,209 @@
+{
+  "pkg": "E:\\WorkBuddy-Work\\WorkBuddy-0\\csp-solver-opt",
+  "cases": {
+    "queens-11-all": {
+      "repeats": 1,
+      "solutions": 2680,
+      "arms": {
+        "legacy": {
+          "median_ms": 1343.654,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 1047.575,
+          "speedup_median": 1.345,
+          "speedup_min": 1.274,
+          "speedup_max": 1.387,
+          "won_rounds": 5
+        },
+        "scope": {
+          "median_ms": 1478.751,
+          "speedup_median": 1.003,
+          "speedup_min": 0.877,
+          "speedup_max": 1.074,
+          "won_rounds": 3
+        },
+        "both": {
+          "median_ms": 1173.482,
+          "speedup_median": 1.191,
+          "speedup_min": 1.124,
+          "speedup_max": 1.432,
+          "won_rounds": 5
+        }
+      }
+    },
+    "sudoku-hard-all": {
+      "repeats": 1,
+      "solutions": 1,
+      "arms": {
+        "legacy": {
+          "median_ms": 9676.64,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 366.278,
+          "speedup_median": 28.713,
+          "speedup_min": 23.297,
+          "speedup_max": 29.048,
+          "won_rounds": 5
+        },
+        "scope": {
+          "median_ms": 6023.7,
+          "speedup_median": 1.614,
+          "speedup_min": 1.518,
+          "speedup_max": 1.792,
+          "won_rounds": 5
+        },
+        "both": {
+          "median_ms": 234.441,
+          "speedup_median": 42.649,
+          "speedup_min": 37.422,
+          "speedup_max": 45.836,
+          "won_rounds": 5
+        }
+      }
+    },
+    "dedispersion-all": {
+      "repeats": 7,
+      "solutions": 11130,
+      "arms": {
+        "legacy": {
+          "median_ms": 43.595,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 52.777,
+          "speedup_median": 0.826,
+          "speedup_min": 0.789,
+          "speedup_max": 0.948,
+          "won_rounds": 0
+        },
+        "scope": {
+          "median_ms": 35.719,
+          "speedup_median": 1.215,
+          "speedup_min": 1.074,
+          "speedup_max": 1.251,
+          "won_rounds": 5
+        },
+        "both": {
+          "median_ms": 34.626,
+          "speedup_median": 1.263,
+          "speedup_min": 0.952,
+          "speedup_max": 1.317,
+          "won_rounds": 4
+        }
+      }
+    },
+    "microhh-small-all": {
+      "repeats": 3,
+      "solutions": 11340,
+      "arms": {
+        "legacy": {
+          "median_ms": 91.34,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 99.606,
+          "speedup_median": 0.931,
+          "speedup_min": 0.897,
+          "speedup_max": 0.939,
+          "won_rounds": 0
+        },
+        "scope": {
+          "median_ms": 57.096,
+          "speedup_median": 1.57,
+          "speedup_min": 1.451,
+          "speedup_max": 1.712,
+          "won_rounds": 5
+        },
+        "both": {
+          "median_ms": 63.269,
+          "speedup_median": 1.461,
+          "speedup_min": 1.404,
+          "speedup_max": 1.495,
+          "won_rounds": 5
+        }
+      }
+    },
+    "hotspot-all": {
+      "repeats": 1,
+      "solutions": 349853,
+      "arms": {
+        "legacy": {
+          "median_ms": 1584.856,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 1531.054,
+          "speedup_median": 1.016,
+          "speedup_min": 0.969,
+          "speedup_max": 1.039,
+          "won_rounds": 4
+        },
+        "scope": {
+          "median_ms": 1346.61,
+          "speedup_median": 1.181,
+          "speedup_min": 1.04,
+          "speedup_max": 1.275,
+          "won_rounds": 5
+        },
+        "both": {
+          "median_ms": 1285.783,
+          "speedup_median": 1.219,
+          "speedup_min": 1.139,
+          "speedup_max": 1.233,
+          "won_rounds": 5
+        }
+      }
+    },
+    "queens-20-first": {
+      "repeats": 1,
+      "solutions": 1,
+      "arms": {
+        "legacy": {
+          "median_ms": 2434.103,
+          "speedup_median": 1.0,
+          "speedup_min": 1.0,
+          "speedup_max": 1.0,
+          "won_rounds": 0
+        },
+        "mrv": {
+          "median_ms": 3.237,
+          "speedup_median": 739.243,
+          "speedup_min": 670.577,
+          "speedup_max": 822.061,
+          "won_rounds": 5
+        },
+        "scope": {
+          "median_ms": 2559.102,
+          "speedup_median": 0.935,
+          "speedup_min": 0.852,
+          "speedup_max": 1.043,
+          "won_rounds": 2
+        },
+        "both": {
+          "median_ms": 3.324,
+          "speedup_median": 719.828,
+          "speedup_min": 625.459,
+          "speedup_max": 808.853,
+          "won_rounds": 5
+        }
+      }
+    }
+  }
+}

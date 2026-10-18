@@ -1,0 +1,10 @@
+queens-8-all         sols=      92 calls=       24582
+queens-9-all         sols=     352 calls=      109080
+queens-10-all        sols=     724 calls=      480304
+queens-11-all        sols=    2680 calls=     2364060
+queens-16-first      sols=       1 calls=      212303
+queens-20-first      sols=       1 calls=     4902182
+sudoku-hard-all      sols=       1 calls=     1916096
+dedispersion-all     sols=   11130 calls=       17714
+microhh-small-all    sols=   11340 calls=       25125
+hotspot-all          sols=  349853 calls=      914440

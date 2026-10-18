@@ -1,0 +1,132 @@
+# This workflow checks out a new release and publishes it to PyPI using Poetry.
+#
+# First it builds a wheel for every combination of OS and Python version listed, save for Python 3.12 on ubuntu-latest.
+# It then starts an ubuntu-latest instance that retrieves all built wheels, and builds a wheel for Python 3.12 and a source distribution.
+# Finally it uploads the source and all wheels to PyPI.
+
+name: Publish Package
+
+# Controls when the workflow will run
+on:
+    # Workflow will run when a release has been published for the package
+    release:
+        types:
+            - published
+
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+
+jobs:
+    build_platform_specific_wheels:
+        name: Build for Python ${{ matrix.pyversion }} on ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix: # important: if this matrix is changed, also change EXPECTED_WHEELS_COUNT in `build_and_publish_as_package` below
+                os: [ubuntu-latest, ubuntu-24.04-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-latest, macos-14, windows-latest, windows-11-arm] # ubuntu-22.04 is used to generate wheels for manylinux_2_35 in addition to the manylinux_2_39 of ubuntu-latest
+                pyversion: ["3.11", "3.12", "3.13", "3.14"]
+                exclude:
+                    - os: ubuntu-latest
+                      pyversion: "3.14" # exclude because we already use this OS and version for building the source package
+
+        steps:
+            - uses: actions/checkout@v7
+            - name: Setup Python
+              uses: actions/setup-python@v7
+              with:
+                  python-version: ${{ matrix.pyversion }}
+            - name: Setup Poetry
+              uses: Gr1N/setup-poetry@v9
+            - name: Build older macOS wheel distribution
+              if: matrix.os == 'macos-14'
+              env:
+                  MACOSX_DEPLOYMENT_TARGET: "13.0"  # Must be equal to the current Pixi "osx-arm64" minimum version (https://pixi.prefix.dev/latest/workspace/system_requirements/#equivalent-forms).
+              run: |
+                  poetry install
+                  poetry build -f wheel  
+                  # Verify the binary was genuinely built for the macOS deployment target
+                  otool -l constraint/*.so | grep -A3 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX'  
+                  # Poetry tags the wheel using the host OS; replace tag with the minimum OS required
+                  python -m pip install --disable-pip-version-check wheel
+                  python -m wheel tags --remove --platform-tag=macosx_13_0_arm64 dist/*.whl  
+                  ls dist
+            - name: Build wheel distribution
+              if: matrix.os != 'macos-14'
+              run: |
+                  poetry install
+                  poetry build -f wheel
+                  ls ./dist
+            - name: Upload the built wheel distribution
+              uses: actions/upload-artifact@v7
+              with:
+                  name: ${{ matrix.os }}_${{ matrix.pyversion }}
+                  path: ./dist/*.whl
+                  if-no-files-found: error
+
+    build_and_publish_as_package:
+        name: Package and upload release to PyPI
+        needs: [build_platform_specific_wheels]
+        runs-on: ubuntu-latest
+        environment:
+            name: pypi
+            url: https://pypi.org/p/python-constraint2
+        permissions:
+            id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+        steps:
+            - name: Build the source distribution and platform-specific wheel
+              uses: actions/checkout@v7
+            - name: Setup Python
+              uses: actions/setup-python@v7
+              with:
+                  python-version: "3.14"
+            - name: Setup Poetry
+              uses: Gr1N/setup-poetry@v9
+            - name: Build for Python 3.14 on ubuntu-latest
+              run: |
+                  poetry install
+                  poetry build
+                  ls ./dist
+            - name: Install cibuildwheel
+              run: python -m pip install cibuildwheel==4.2.0
+            - name: Build older Linux wheel distribution
+              env:
+                CIBW_BUILD: "cp311-* cp312-* cp313-* cp314-*"
+                CIBW_ARCHS_LINUX: "x86_64"
+                CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28      # Must be equal to the current Pixi "linux-64" minimum GLIBC version (https://pixi.prefix.dev/latest/workspace/system_requirements/#equivalent-forms).
+                CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+              run: python -m cibuildwheel --output-dir dist
+            - name: Download all platform-specific wheels to the `temp_dist` folder
+              uses: actions/download-artifact@v8
+              with:
+                  path: ./temp_dist
+            - name: Unpack the remotely built wheels to the `dist` folder
+              run: | # searches for wheel files in all subdirectories of ./temp_dist and moves the files to ./dist
+                  echo "Received artifacts:"
+                  ls ./temp_dist
+                  echo "\n"
+                  mkdir -p ./dist
+                  find ./temp_dist -name '*.whl' -exec mv {} ./dist \;
+                  echo "Unpacked files:"
+                  ls ./dist
+                  echo "\n"
+                  rm -rf ./temp_dist
+            - name: Check that the number of wheels is as expected and there is one source distribution
+              run: |
+                  SOURCES_COUNT=$(ls -lR ./dist/*.tar.gz | wc -l)
+                  echo "Number of source distributions: $SOURCES_COUNT"
+                  if [ "$SOURCES_COUNT" -ne 1 ]; then
+                    echo "::error::Number of source distributions $SOURCES_COUNT not equal to 1"
+                    exit 1;
+                  fi
+
+                  EXPECTED_WHEELS_COUNT=40
+                  WHEELS_COUNT=$(ls -lR ./dist/*.whl | wc -l)
+                  echo "Number of wheel distributions: $WHEELS_COUNT"
+                  if [ "$WHEELS_COUNT" -ne "$EXPECTED_WHEELS_COUNT" ]; then
+                    echo "::error::Number of wheel distributions $WHEELS_COUNT not equal to $EXPECTED_WHEELS_COUNT"
+                    exit 1;
+                  fi
+            - name: Publish package distributions to PyPI
+              uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                  skip-existing: true
