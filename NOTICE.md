@@ -30,7 +30,10 @@ All modifications are in `constraint/solvers.py`, plus one added test file and t
 | `constraint/solvers.py` | **modified** — solver search loop (`SearchPlan`, dynamic MRV, restricted push domains) |
 | `constraint/constraints.py` | **modified** — three empty-domain guards in the sum constraints (crash fix, see below) |
 | `tests/test_solver_optimizations.py` | added |
-| `bench/` | added (benchmark harness + raw results) |
+| `bench/` | added (benchmark harness, raw results, figure and page generators) |
+| `index.html` | added — single-file reading page served by GitHub Pages |
+| `.github/workflows/publish-documentation.yml` | **modified** — automatic Sphinx deployment disabled, because GitHub Pages serves this report instead |
+| `.github/workflows/build-test-python-package.yml` | **modified** — `bench/**` added to the path filter, `workflow_dispatch` enabled |
 | `README.md` | added (this build's README; the upstream `README.rst` is kept) |
 | `IMPROVEMENT_REPORT.md`, `BENCHMARKS.md`, `NOTICE.md` | added |
 | `constraint/*.c` | **removed** — Cython-generated artifacts (`constraints.c`, `domain.c`, `parser.c`, `problem.c`, `solvers.c`), ~6.5 MB of generated code that no longer matches the modified Python sources |

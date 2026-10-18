@@ -1,17 +1,18 @@
-# This workflow builds Sphinx documentation and deploys it to GitHub Pages.
+# This workflow builds the Sphinx documentation and deploys it to GitHub Pages.
+#
+# MODIFIED in this build: upstream deploys on every push to main and on every
+# release. Here GitHub Pages serves the solver speed-up report instead
+# (index.html at the repository root, Pages source = branch/main, build_type =
+# legacy), while sphinx-notes/pages requires the Pages source to be "GitHub
+# Actions". The two cannot own the same site, so automatic deployment is
+# disabled; run this workflow manually if you want the Sphinx docs published
+# (that requires switching the Pages source to "GitHub Actions" first).
+# See NOTICE.md.
 
 name: Publish documentation
 
 on:
-    push:
-        branches: [main] # branch to trigger deployment
-        paths:
-            - "docs/**"
-            - "constraint/**"
-            - "pyproject.toml"
-            - ".github/workflows/publish-documentation.yml"
-    release:
-        types: [published] # releases trigger deployment as well
+    workflow_dispatch:
 
 jobs:
     pages:

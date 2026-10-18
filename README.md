@@ -8,6 +8,9 @@ concrete inefficiencies.
 It is a drop-in replacement: same package name, same public API, same
 constraints, same results.
 
+> **Reading version (no git needed):** <https://linluozi.github.io/python-constraint-solver-opt/>
+> — the same analysis with the figures and tables rendered.
+
 ![speed-up per benchmark case](docs/assets/speedup.png)
 
 `20-queens` (first solution) goes from 2 628 ms to 3.1 ms, the classic hard
